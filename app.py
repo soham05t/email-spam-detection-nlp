@@ -4,60 +4,86 @@ import joblib
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-# -----------------------------
-# Paths
-# -----------------------------
-BASE_DIR = Path(__file__).resolve().parent.parent
+# ============================================================
+# PATHS
+# ============================================================
+
+# app.py is in the project root
+BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
 
-# -----------------------------
-# Page setup
-# -----------------------------
+# ============================================================
+# PAGE SETUP
+# ============================================================
+
 st.set_page_config(
     page_title="Email Spam Detection",
     page_icon="📧",
     layout="wide"
 )
 
-# -----------------------------
-# Load files
-# -----------------------------
+# ============================================================
+# LOAD FILES
+# ============================================================
+
 @st.cache_resource
 def load_model():
     return joblib.load(MODELS_DIR / "spam_model.pkl")
+
 
 @st.cache_data
 def load_sample_messages():
     return joblib.load(MODELS_DIR / "sample_messages.pkl")
 
+
 @st.cache_data
 def load_spam_keywords():
     return joblib.load(MODELS_DIR / "spam_keywords.pkl")
 
+
 @st.cache_data
 def load_confidence_data():
     path = MODELS_DIR / "spam_confidence_data.pkl"
+
     if path.exists():
         return joblib.load(path)
+
     return None
+
 
 model = load_model()
 sample_messages = load_sample_messages()
 keyword_df = load_spam_keywords()
 confidence_df = load_confidence_data()
 
-# -----------------------------
-# Helper function
-# -----------------------------
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
 suspicious_words = [
-    "free", "win", "winner", "cash", "prize",
-    "urgent", "claim", "click", "call", "now",
-    "reward", "selected", "account", "verify",
-    "limited", "offer", "congratulations"
+    "free",
+    "win",
+    "winner",
+    "cash",
+    "prize",
+    "urgent",
+    "claim",
+    "click",
+    "call",
+    "now",
+    "reward",
+    "selected",
+    "account",
+    "verify",
+    "limited",
+    "offer",
+    "congratulations"
 ]
+
 
 def find_suspicious_words(message):
     found = []
+
     message_lower = message.lower()
 
     for word in suspicious_words:
@@ -66,37 +92,84 @@ def find_suspicious_words(message):
 
     return found
 
-# -----------------------------
-# Title
-# -----------------------------
+
+def get_spam_probability(message):
+    try:
+        probability = model.predict_proba([message])[0][1] * 100
+        return probability
+    except Exception:
+        return None
+
+
+def display_risk(probability):
+    if probability is None:
+        st.info("Confidence score unavailable for this saved model.")
+        return
+
+    st.metric(
+        "Spam Probability",
+        f"{probability:.2f}%"
+    )
+
+    st.progress(
+        min(100, max(0, int(probability)))
+    )
+
+    if probability < 30:
+        st.success("🟢 Low Risk")
+
+    elif probability < 70:
+        st.warning("🟡 Medium Risk")
+
+    else:
+        st.error("🔴 High Risk")
+
+
+# ============================================================
+# TITLE
+# ============================================================
+
 st.title("📧 Email Spam Detection with Explainable NLP")
 
 st.markdown("""
-This proof-of-concept system uses Natural Language Processing to classify messages as
-**legitimate** or **spam / suspicious**.
+This proof-of-concept system uses Natural Language Processing to classify
+messages as **legitimate** or **spam / suspicious**.
 
-It also highlights suspicious words and shows interpretable spam-associated keywords.
+The application also highlights suspicious terms and provides simple
+explainability through spam-associated keywords.
 """)
 
-# -----------------------------
-# Sidebar
-# -----------------------------
+# ============================================================
+# SIDEBAR
+# ============================================================
+
 with st.sidebar:
+
     st.title("📘 Project Menu")
 
     st.write("""
     ### How to Use
+
     1. Paste an email or message
-    2. Click Detect Spam
-    3. Review the prediction and confidence
-    4. Check suspicious words and model insights
+    2. Click **Detect Spam**
+    3. Review the prediction
+    4. Check the spam probability
+    5. Review suspicious words
+    6. Explore model insights
     """)
 
-    st.info("Cybersecurity NLP proof-of-concept.")
+    st.info(
+        "Cybersecurity NLP proof-of-concept."
+    )
 
-# -----------------------------
-# Tabs
-# -----------------------------
+    st.warning(
+        "This application is not a production phishing detection system."
+    )
+
+# ============================================================
+# TABS
+# ============================================================
+
 tab1, tab2, tab3, tab4 = st.tabs([
     "📧 Spam Detection",
     "📊 Sample Messages",
@@ -107,7 +180,9 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ============================================================
 # TAB 1 — SPAM DETECTION
 # ============================================================
+
 with tab1:
+
     st.subheader("📧 Paste Message or Email Text")
 
     example_messages = [
@@ -129,220 +204,451 @@ with tab1:
         height=180
     )
 
-    if st.button("Detect Spam"):
-        if user_message.strip() == "":
-            st.warning("Please enter a message first.")
-        else:
-            prediction = model.predict([user_message])[0]
+    if st.button(
+        "Detect Spam",
+        type="primary"
+    ):
 
-            try:
-                probability = model.predict_proba([user_message])[0][1] * 100
-            except Exception:
-                probability = None
+        if user_message.strip() == "":
+
+            st.warning(
+                "Please enter a message first."
+            )
+
+        else:
+
+            prediction = model.predict(
+                [user_message]
+            )[0]
+
+            probability = get_spam_probability(
+                user_message
+            )
+
+            suspicious_found = find_suspicious_words(
+                user_message
+            )
 
             st.subheader("📋 Detection Result")
 
+            # ------------------------------------------------
+            # Main prediction
+            # ------------------------------------------------
+
             if prediction == 1:
-                st.error("### Spam / Suspicious Message Detected 🚨")
-            else:
-                st.success("### Legitimate Message ✅")
 
-            if probability is not None:
-                st.metric("Spam Probability", f"{probability:.2f}%")
-                st.progress(int(probability))
-
-                if probability < 30:
-                    st.success("🟢 Low Risk")
-                elif probability < 70:
-                    st.warning("🟡 Medium Risk")
-                else:
-                    st.error("🔴 High Risk")
+                st.error(
+                    "### Spam / Suspicious Message Detected 🚨"
+                )
 
             else:
-                st.info("Confidence score unavailable for this saved model.")
 
-            suspicious_found = find_suspicious_words(user_message)
+                st.success(
+                    "### Legitimate Message ✅"
+                )
 
-            st.write("### Suspicious Words Detected")
+            # ------------------------------------------------
+            # Probability / risk
+            # ------------------------------------------------
+
+            display_risk(probability)
+
+            # ------------------------------------------------
+            # Recommended action
+            # ------------------------------------------------
+
+            st.write("### Recommended Action")
+
+            if prediction == 1:
+
+                st.warning("""
+                - Do not click unexpected links
+                - Do not download unknown attachments
+                - Verify the sender independently
+                - Avoid providing personal or financial information
+                - Report or delete the message if appropriate
+                """)
+
+            else:
+
+                st.info("""
+                The message appears legitimate according to the model.
+
+                You should still verify unexpected links, attachments
+                and sender information before taking action.
+                """)
+
+            # ------------------------------------------------
+            # Suspicious words
+            # ------------------------------------------------
+
+            st.write(
+                "### Suspicious Words Detected"
+            )
 
             if suspicious_found:
-                st.warning(", ".join(suspicious_found))
+
+                st.warning(
+                    ", ".join(suspicious_found)
+                )
+
+            else:
+
+                st.success(
+                    "No predefined suspicious keywords detected."
+                )
+
+            # ------------------------------------------------
+            # Metrics
+            # ------------------------------------------------
+
+            col1, col2 = st.columns(2)
+
+            with col1:
 
                 st.metric(
                     "Suspicious Keyword Count",
                     len(suspicious_found)
                 )
-            else:
-                st.success("No predefined suspicious keywords detected.")
+
+            with col2:
 
                 st.metric(
-                    "Suspicious Keyword Count",
-                    0
+                    "Message Length",
+                    len(user_message)
                 )
 
-            st.write("### Input Message")
-            st.write(user_message)
+            # ------------------------------------------------
+            # Explanation
+            # ------------------------------------------------
 
-            st.write("### Why was this prediction made?")
+            st.write(
+                "### Why was this prediction made?"
+            )
 
             st.write("""
-            The machine learning model converts the message into numerical TF-IDF features.
-            Words that frequently appear in spam messages contribute more strongly towards a spam prediction.
-            The suspicious keywords shown above provide a simple explanation of why the message may have been classified as spam.
+            The machine learning model converts the message into
+            numerical TF-IDF features.
+
+            Logistic Regression then uses learned word weights to
+            determine whether the language resembles patterns commonly
+            found in spam messages.
+
+            The suspicious keywords above provide an additional simple
+            explanation for the user.
             """)
 
-            st.metric(
-                "Message Length",
-                len(user_message)
-            )
+            # ------------------------------------------------
+            # Input message
+            # ------------------------------------------------
+
+            with st.expander(
+                "View analysed message"
+            ):
+
+                st.write(user_message)
 
 # ============================================================
 # TAB 2 — SAMPLE MESSAGES
 # ============================================================
+
 with tab2:
+
     st.subheader("📊 Sample Messages")
+
+    st.write("""
+    Select a message from the held-out test dataset and run it
+    through the trained model.
+    """)
 
     sample_df = pd.DataFrame({
         "Message": sample_messages
     })
 
-    st.dataframe(sample_df.head(100))
+    st.dataframe(
+        sample_df.head(100),
+        use_container_width=True
+    )
 
     selected_index = st.selectbox(
         "Choose a sample message:",
         sample_df.index
     )
 
-    selected_message = sample_df.loc[selected_index, "Message"]
+    selected_message = sample_df.loc[
+        selected_index,
+        "Message"
+    ]
 
     st.write("### Selected Message")
+
     st.write(selected_message)
 
-    prediction = model.predict([selected_message])[0]
+    if st.button(
+        "Classify Selected Message"
+    ):
 
-    try:
-        probability = model.predict_proba([selected_message])[0][1] * 100
-    except Exception:
-        probability = None
+        prediction = model.predict(
+            [selected_message]
+        )[0]
 
-    if prediction == 1:
-        st.error("### Spam / Suspicious Message Detected 🚨")
-    else:
-        st.success("### Legitimate Message ✅")
+        probability = get_spam_probability(
+            selected_message
+        )
 
-    if prediction == 1:
-        st.warning("""
-        **Recommended Action**
+        st.subheader(
+            "📋 Sample Classification"
+        )
 
-        • Do not click any links.
+        if prediction == 1:
 
-        • Do not download attachments.
+            st.error(
+                "### Spam / Suspicious Message Detected 🚨"
+            )
 
-        • Verify the sender before responding.
+        else:
 
-        • Delete or report the message if suspicious.
-        """)
-    else:
-        st.info("""
-            **Recommended Action**
+            st.success(
+                "### Legitimate Message ✅"
+            )
 
-            The message appears legitimate, but always verify unexpected links,
-            attachments and sender information.
-            """)
+        display_risk(probability)
 
-    if probability is not None:
-        st.info(f"Spam Probability: {probability:.2f}%")
-    else:
-        st.info("Confidence score unavailable for this saved model.")
+        suspicious_found = find_suspicious_words(
+            selected_message
+        )
+
+        if suspicious_found:
+
+            st.write(
+                "### Suspicious Words"
+            )
+
+            st.warning(
+                ", ".join(suspicious_found)
+            )
 
 # ============================================================
 # TAB 3 — MODEL INSIGHTS
 # ============================================================
+
 with tab3:
+
     st.subheader("🔎 Model Insights")
 
-    st.write("### Top Spam-Associated Keywords")
+    # --------------------------------------------------------
+    # Keywords
+    # --------------------------------------------------------
+
+    st.write(
+        "### Top Spam-Associated Keywords"
+    )
 
     top_keywords = keyword_df.head(15)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(
+        figsize=(8, 6)
+    )
+
     ax.barh(
         top_keywords["Keyword"],
         top_keywords["Spam_Weight"]
     )
+
     ax.invert_yaxis()
-    ax.set_title("Top Spam-Associated Keywords")
-    ax.set_xlabel("Spam Weight")
+
+    ax.set_title(
+        "Top Spam-Associated Keywords"
+    )
+
+    ax.set_xlabel(
+        "Logistic Regression Weight"
+    )
 
     st.pyplot(fig)
 
-    st.write("### Keyword Table")
-    st.dataframe(keyword_df.head(30))
+    plt.close(fig)
+
+    st.caption("""
+    Larger positive weights indicate terms that contribute more strongly
+    towards the model predicting spam.
+    """)
+
+    # --------------------------------------------------------
+    # Keyword table
+    # --------------------------------------------------------
+
+    st.write(
+        "### Keyword Importance Table"
+    )
+
+    st.dataframe(
+        keyword_df.head(30),
+        use_container_width=True
+    )
+
+    # --------------------------------------------------------
+    # Optional saved confidence data
+    # --------------------------------------------------------
 
     if confidence_df is not None:
-        st.write("### Highest Risk Messages")
 
-        st.dataframe(
-            confidence_df.sort_values(
-                "SpamProbability",
-                ascending=False
-            ).head(20)
+        st.divider()
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            st.metric(
+                "Test Messages Analysed",
+                len(confidence_df)
+            )
+
+        with col2:
+
+            if "SpamProbability" in confidence_df.columns:
+
+                avg_probability = (
+                    confidence_df[
+                        "SpamProbability"
+                    ].mean()
+                    * 100
+                )
+
+                st.metric(
+                    "Average Spam Probability",
+                    f"{avg_probability:.2f}%"
+                )
+
+        st.write(
+            "### Highest Risk Messages"
         )
 
-        st.write("### Misclassified Messages")
+        if (
+            "SpamProbability"
+            in confidence_df.columns
+        ):
 
-        wrong_predictions = confidence_df[
-            confidence_df["Actual"] != confidence_df["Predicted"]
-        ]
+            highest_risk = (
+                confidence_df
+                .sort_values(
+                    "SpamProbability",
+                    ascending=False
+                )
+                .head(20)
+            )
 
-        st.dataframe(wrong_predictions.head(20))
+            st.dataframe(
+                highest_risk,
+                use_container_width=True
+            )
+
+        if (
+            "Actual" in confidence_df.columns
+            and
+            "Predicted" in confidence_df.columns
+        ):
+
+            st.write(
+                "### Misclassified Messages"
+            )
+
+            wrong_predictions = confidence_df[
+                confidence_df["Actual"]
+                !=
+                confidence_df["Predicted"]
+            ]
+
+            st.dataframe(
+                wrong_predictions.head(20),
+                use_container_width=True
+            )
+
+    else:
+
+        st.info("""
+        Optional confidence analysis data was not found.
+        The main prediction system will still work normally.
+        """)
 
 # ============================================================
 # TAB 4 — ABOUT
 # ============================================================
+
 with tab4:
-    st.subheader("ℹ️ About This Project")
 
-    st.write("""
-    This proof-of-concept project explores spam detection using Natural Language Processing.
+    st.subheader(
+        "ℹ️ About This Project"
+    )
 
-    **Machine Learning Task**
+    st.markdown("""
+    ### Project Overview
+
+    This proof-of-concept project explores spam detection using
+    Natural Language Processing and machine learning.
+
+    ### Machine Learning Task
+
     - Binary text classification
-    - Classifies messages as legitimate or spam
-    - Uses TF-IDF vectorisation and Logistic Regression
+    - Legitimate vs spam messages
+    - TF-IDF text vectorisation
+    - Logistic Regression classification
 
-    **Explainability**
-    - Spam-associated keywords are extracted from the model coefficients
-    - Suspicious words are highlighted for user understanding
+    ### Explainability
 
-    **Cybersecurity Relevance**
-    Spam and suspicious messages are common attack vectors for scams and phishing attempts.
-    Machine learning can help identify risky text patterns.
+    Logistic Regression coefficients are used to identify terms
+    associated with spam predictions.
 
-    **Limitations**
-    - Dataset is SMS-style and may not fully represent modern phishing emails
-    - The model does not inspect links, attachments, sender reputation or email headers
-    - Suspicious keyword matching is simple and rule-based
-    - This is not a production email security tool
+    A separate suspicious-keyword mechanism is also included to
+    provide users with an easier-to-understand explanation.
+
+    ### Cybersecurity Relevance
+
+    Spam and suspicious messages are common attack vectors for
+    scams, social engineering and phishing.
+
+    Machine learning can help filter suspicious content before
+    users interact with potentially harmful messages.
+
+    ### Limitations
+
+    - The dataset mainly contains SMS-style messages
+    - It may not represent modern business email
+    - The model does not inspect URLs
+    - It does not inspect attachments
+    - It does not analyse email headers
+    - It does not assess sender reputation
+    - It does not detect domain spoofing
+    - Keyword matching is simple and rule-based
+    - This is not a production email security system
     """)
 
+    st.divider()
+
+    st.subheader(
+        "🎣 Phishing Detection Limitations"
+    )
+
     st.write("""
-    ### Phishing Detection
+    This application identifies spam-like **text patterns**.
 
-    This application detects spam-like language patterns only.
+    It does not perform full phishing detection because it does not
+    analyse technical indicators such as:
 
-    It does **not** inspect:
-
-    - URLs
-    - Attachments
+    - URL reputation
+    - Domain age
+    - Sender authentication
+    - SPF / DKIM / DMARC
     - Email headers
-    - Sender reputation
-    - Domain spoofing
-
-    Therefore, sophisticated phishing emails may still evade detection.
+    - Attachments
+    - Redirect chains
+    - Website content
     """)
 
     st.warning("""
-    This app is for educational and defensive cybersecurity purposes only.
-    It should not be used as a production spam or phishing detection system.
+    This application is for educational and defensive cybersecurity
+    purposes only.
+
+    It should not be used as a production spam, phishing,
+    or email-security system.
     """)
