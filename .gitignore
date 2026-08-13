@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.vscode/
+anaconda_projects/
+.DS_Store
+Thumbs.db
